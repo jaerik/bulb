@@ -1,0 +1,73 @@
+#!/bin/sh -eu
+
+. $BOLB_SH_UTILS
+
+usage() {
+	echo "
+Usage: ${0##*/} [options] file
+options:
+		-e loadtime
+        -r The root directory
+        -h Print this help and exit
+"
+}
+
+root_dir=
+loadtime=0
+while getopts 'er:h' opt; do
+	case $opt in
+		e)
+			loadtime=1
+			;;
+		r)
+			root_dir=$OPTARG
+			;;
+		h)
+			usage
+			exit
+			;;
+		*)
+			usage
+			exit 1
+			;;
+	esac
+done
+
+shift $((OPTIND - 1))
+
+bin_path="${1:-}"
+
+[ -n "$bin_path" ] || croak The binary path parameter is missing.
+
+rtld=$(file -b "$bin_path" |sed 's/.*, interpreter \([^,]*\).*/\1/')
+
+[ -f "$rtld" ] || croak $rtld not found, architecture is not a supported architecture.
+
+tmp_root=$(mktemp -d)
+[ -z "$root_dir" ] || cp -a "$root_dir/." "$tmp_root/"
+
+env_bin=/usr/bin/env
+
+env_libs=$(ldd $env_bin |{
+    host_rtld=
+	while read lib n path n; do
+		[ -z "$path" ] || echo $path || [ -f "$lib" ]
+		host_rtld=$lib
+	done
+    echo $host_rtld
+})
+
+echo $env_libs
+
+for source in $env_bin $env_libs $rtld "$bin_path"; do
+	dest="$tmp_root$source"
+	[ -e "$dest" ] || {
+		install -D "$source" "$dest"
+	}
+done
+
+cmd="LD_TRACE_LOADED_OBJECTS=1 $rtld $bin_path"
+[ $loadtime -eq 0 ] || cmd="LD_DEBUG=libs $bin_path"
+chroot "$tmp_root" $env_bin $cmd
+
+rm -rf $tmp_root

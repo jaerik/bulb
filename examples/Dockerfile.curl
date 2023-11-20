@@ -1,0 +1,12 @@
+ARG EXPORT_DIR=/export
+
+FROM erikja/bulb:0.1.0 AS build
+ARG EXPORT_DIR
+ARG ARCH=amd64
+RUN IN=$(install-pkgs -a $ARCH curl) \
+ && build-sysroot -i $IN -o $EXPORT_DIR $IN/usr/bin/curl
+
+FROM scratch
+ARG EXPORT_DIR
+COPY --from=build $EXPORT_DIR /
+ENTRYPOINT ["/usr/bin/curl"]

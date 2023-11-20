@@ -1,0 +1,121 @@
+#!/bin/sh -eu
+
+. $BOLB_SH_UTILS
+
+usage() {
+	echo "
+Usage: ${0##*/} [options] package[-]...
+If a hyphen (-) is appended to the package name (with no intervening space), the identified package will not be installed.
+options:
+        -a The package architecture
+        -r The installation root directory
+        -h Print this help and exit
+"
+}
+
+# Usage: ignore_dependencies deb_cache_dir package...
+ignore_dependencies() {
+	l_deb_cache=${1:-}
+	[ -n "$l_deb_cache" ] || croak The deb cache path parameter is missing
+	[ -d "$l_deb_cache" ] || croak $l_deb_cache is not a directory
+	shift
+	cd $l_deb_cache
+	[ -d archives ] || install -d archives
+	cd archives
+	for l_dep in $*; do
+		l_dep_version=$(apt-cache show $l_dep |sed -n 's/Version: \(.*\)/\1/p')
+		equivs-control $l_dep.control
+		sed -i -e "s/<package name; defaults to equivs-dummy>/$l_dep/g" \
+		       -e "s/# Version: <enter version here; defaults to 1.0>/Version: $l_dep_version/g" $l_dep.control
+		equivs-build $l_dep.control >/dev/null 2>&1
+		dpkg -i ${l_dep}_${l_dep_version}_all.deb >/dev/null
+		rm $l_dep.control
+	done
+}
+
+root_dir=
+arch=
+while getopts 'a:r:h' opt; do
+	case $opt in
+		a)
+			arch=$OPTARG
+			;;
+		r)
+			root_dir=$OPTARG
+			;;
+		h)
+			usage
+			exit
+			;;
+		*)
+			usage
+			exit 1
+			;;
+	esac
+done
+
+[ -n "$arch" ] || {
+	usage
+	exit 1
+}
+
+shift $((OPTIND - 1))
+
+[ $# -gt 0 ] || {
+	usage
+	exit 1
+}
+
+root_dir=${root_dir:-$(mktemp -d)}
+
+[ -d "$root_dir" ] || install -d $root_dir 2>/dev/null || echo $root_dir is not a directory
+
+cd "$root_dir"
+
+dpkg_backup=$(mktemp -d)
+
+mv /var/lib/dpkg $dpkg_backup
+
+if [ -d "$root_dir/var/lib/dpkg" ]; then
+	cp -r "$root_dir/var/lib/dpkg" /var/lib/dpkg
+else
+	cp -r /var/lib/dpkg-empty /var/lib/dpkg
+fi
+
+echo $arch >>/var/lib/dpkg/arch
+
+ignore=
+install=
+for deb in $*; do
+	case $deb in
+		*-)
+			ignore=${ignore:+$ignore }${deb%%-}
+			;;
+		*)
+			install=${install:+$install }$deb
+			;;
+	esac
+done
+
+deb_cache=$(mktemp -d)
+install -d $deb_cache
+ignore_dependencies $deb_cache $ignore
+
+apt-get -q=2 update -o=APT::Architecture=$arch
+apt-get -q=2 --fix-broken install -o=APT::Architecture=$arch -y --allow-remove-essential
+apt-get -q=2 install --download-only -o=dir::cache=$deb_cache -o=APT::Architecture=$arch -y --no-install-recommends $install
+apt-get -q=2 clean
+
+install -d "$root_dir"
+for f in $deb_cache/archives/*.deb; do
+	dpkg -x $f "$root_dir" >/dev/null;
+done
+dpkg --record-avail -R $deb_cache/archives >/dev/null
+
+rm -rf "$root_dir/var/lib/dpkg"
+install -d "$root_dir/var/lib"
+mv /var/lib/dpkg "$root_dir/var/lib"
+mv $dpkg_backup/dpkg /var/lib
+rm -rf $dpkg_backup $deb_cache
+
+echo $root_dir

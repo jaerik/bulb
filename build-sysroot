@@ -1,0 +1,211 @@
+#!/bin/sh -eu
+
+. $BOLB_SH_UTILS
+
+usage() {
+	echo "
+Usage: ${0##*/} [options] executable...
+options:
+        -i In system's root directory
+        -o Out system's root directory
+        -m Install missing libraries
+        -h Print this help and exit
+"
+}
+
+list_append() {
+	l_list=${1:-}
+	shift
+	[ -z "$l_list" ] || printf '%s\n' "$l_list"
+	[ $# -eq 0 ] || printf '%s\n' "$@"
+}
+
+check_arch() {
+	l_bin_path=${1:-}
+	l_desired_arch=${2:-}
+	[ -n "$l_bin_path" ] || croak The binary path parameter is missing
+
+	l_file_arch=$(file -b "$l_bin_path" |sed 's/[^,]*, \([^,]*\).*/\1/')
+	l_arch=
+	case $l_file_arch in
+		ARM)
+			l_arch=armhf
+			;;
+		'ARM aarch64')
+			l_arch=arm64
+			;;
+		x86-64)
+			l_arch=amd64
+			;;
+		*)
+			croak $l_file_arch is not a supported architecture
+			;;
+	esac
+	[ -z "$l_desired_arch" ] || [ "$l_arch" = "$l_desired_arch" ] || croak "The binary $l_bin_path is of architecture $l_arch which is not desired (desire=$l_desired_arch)"
+	echo $l_arch
+}
+
+find_pkgs() {
+	l_arch=${1:-}
+	[ -n "$l_arch" ] || croak The architecture parameter is missing
+	shift
+	dpkg --add-architecture $l_arch
+	apt-file -a $l_arch update >/dev/null
+	for l_file in "$@"; do
+		# Find and choose the package with the shortest name that contains the needed library
+		apt-file -l -a $l_arch find "$l_file" |{
+			l_pkg=
+			while read l_line; do
+				l_pkg=${l_pkg:=$l_line}
+				[ ${#l_line} -lt ${#l_pkg} ] && l_pkg=$l_line
+			done
+			if [ -n "$l_pkg" ]; then
+				printf '%s ' $l_pkg
+			else
+				bark no package containing $l_file
+			fi
+		}
+	done
+}
+
+get_missing_libs() {
+	local l_bin_path=${1:-}
+	local l_root_dir=${2:+-r$2}
+	[ -n "$l_bin_path" ] || croak The binary path parameter is missing
+	ld-trace "$l_root_dir" "$l_bin_path" |{
+		while read l_line; do
+			lib_path=${l_line#*=> }
+			lib=${l_line% =>*}
+			[ "$lib_path" != 'not found' ] || printf '%s\n' "$lib"
+		done
+	}
+}
+
+get_lib_paths() {
+	local l_bin_path=${1:-}
+	local l_root_dir=${2:+-r$2}
+	[ -n "$l_bin_path" ] || croak The binary path parameter is missing
+	ld-trace "$l_root_dir" "$l_bin_path" |{
+		while read l_line; do
+			lib_path=${l_line#*=> }
+			lib=${l_line% =>*}
+			[ "$lib_path" = 'not found' ] || [ "${lib_path%% \'*}" = 'removed' ] || [ "$lib_path" = "$lib" ] || {
+				lib_path=${lib_path% (*}
+				case $lib_path in
+					/*)
+						lib_path=".$lib_path"
+						;;
+					*)
+						;;
+				esac
+				printf '%s\n' "$lib_path"
+			}
+		done
+	}
+}
+
+install_missing() {
+	l_root_dir=${1:-}
+	l_arch=${2:-}
+	[ -n "$l_root_dir" ] || croak The root directory parameter is missing
+	[ -n "$l_arch" ] || croak The architecture parameter is missing
+	shift 2
+
+	l_missing_libs=
+	for l_bin_path in "$@"; do
+		l_missing_libs="$(get_missing_libs "$l_bin_path" "$l_root_dir")
+$l_missing_libs"
+	done
+
+	[ -n "$l_missing_libs" ] && install_libs_pkgs "$l_root_dir" $l_arch $l_missing_libs
+}
+
+install_libs_pkgs() {
+	l_root_dir=${1:-}
+	l_arch=${2:-}
+	[ -n "$l_root_dir" ] || croak The root directory parameter is missing
+	[ -n "$l_arch" ] || croak The architecture parameter is missing
+	shift 2
+	local l_pkgs=$(find_pkgs $l_arch $*)
+	[ -z "$l_pkgs" ] || install-pkgs -a $l_arch -r "$l_root_dir" $l_pkgs >/dev/null
+}
+
+in_sysroot=
+out_sysroot=
+install_missing=
+while getopts 'i:o:mh' opt; do
+	case $opt in
+		i)
+			in_sysroot=$(get_absolut_path $OPTARG)
+			;;
+		o)
+			out_sysroot=$(get_absolut_path $OPTARG)
+			;;
+		m)
+			install_missing=y
+			;;
+		h)
+			usage
+			exit
+			;;
+		*)
+			usage
+			exit 1
+			;;
+	esac
+done
+
+shift $((OPTIND - 1))
+
+[ $# -gt 0 ] || {
+	usage
+	exit
+}
+
+tmp_in_sysroot=
+[ -n "$in_sysroot" ] || {
+	tmp_in_sysroot=$(mktemp -d)
+	in_sysroot=$tmp_in_sysroot
+}
+
+out_sysroot=${out_sysroot:-$(mktemp -d)}
+
+[ -d "$out_sysroot" ] || install -d $out_sysroot 2>/dev/null || croak $out_sysroot is not a directory
+echo out_sysroot: $out_sysroot
+
+IFS="$(printf '\n\t')"
+
+bin_paths=
+arch=
+rtld=
+for bin in "$@"; do
+	bin_path=$(get_absolut_path $bin)
+	arch=$(check_arch $bin_path $arch)
+	[ -n "$rtld" ] || rtld=$(file -b "$bin_path" |sed 's/.*, interpreter \([^,]*\).*/\1/')
+	bin_paths=$(list_append "$bin_paths" "$bin_path")
+done
+
+[ -z "$install_missing" ] || install_missing "$in_sysroot" $arch $bin_paths
+
+lib_paths=
+for bin_path in $bin_paths; do
+	bin_lib_paths=$(get_lib_paths "$bin_path" "$in_sysroot")
+	lib_paths=$(list_append "$lib_paths" "$bin_lib_paths")
+done
+
+lib_paths=$(echo "$lib_paths" |sort -u)
+
+
+[ -z "$lib_paths" ] || {
+	cd "$in_sysroot"
+	for lib_path in $lib_paths; do
+		cp --parents "$lib_path" "$out_sysroot"
+	done
+}
+
+cp --parents $rtld "$out_sysroot"
+
+install -D -t "$out_sysroot"/usr/bin/ $bin_paths
+
+[ -z "$tmp_in_sysroot" ] || rm -rf $tmp_in_sysroot
+echo $out_sysroot
