@@ -13,6 +13,25 @@ options:
 "
 }
 
+fix_broken_link() {
+	l_link=$1
+	l_root_dir=$2
+	l_target=$(readlink $l_link)
+	echo $l_target |grep -q '^/' || {
+		bark Unable to fix link $l_link -> $l_target
+		return
+	}
+	l_new_target=$(echo $l_target |sed "s%^/%$l_root_dir/%g")
+	ln -srf $l_new_target $l_link
+}
+
+fix_broken_links() {
+	l_root_dir=$1
+	find "$l_root_dir" -xtype l -print |while read -r broken_link; do
+		fix_broken_link $broken_link $l_root_dir
+	done
+}
+
 # Usage: ignore_dependencies deb_cache_dir package...
 ignore_dependencies() {
 	l_deb_cache=${1:-}
@@ -67,6 +86,7 @@ shift $((OPTIND - 1))
 }
 
 root_dir=${root_dir:-$(mktemp -d)}
+root_dir=$(get_absolut_path($root_dir))
 
 [ -d "$root_dir" ] || install -d $root_dir 2>/dev/null || echo $root_dir is not a directory
 
@@ -110,6 +130,9 @@ install -d "$root_dir"
 for f in $deb_cache/archives/*.deb; do
 	dpkg -x $f "$root_dir" >/dev/null;
 done
+
+fix_broken_links "$root_dir"
+
 dpkg --record-avail -R $deb_cache/archives >/dev/null
 
 rm -rf "$root_dir/var/lib/dpkg"
