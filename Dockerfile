@@ -1,5 +1,5 @@
 FROM debian:bookworm-slim
-ENV BOLB_SH_UTILS=/usr/lib/utils.sh
+ENV BULB_SH_UTILS=/usr/lib/utils.sh
 RUN apt-get update \
  && apt-get install -yf --no-install-recommends \
         apt-file  \
@@ -15,5 +15,5 @@ RUN ln -sf /usr/aarch64-linux-gnu/lib/ld-linux-aarch64.so.1 /lib/ld-linux-aarch6
 
 ADD dpkg-empty.tar /var/lib/dpkg-empty
 COPY build-sysroot install-pkgs ld-trace /usr/bin/
-COPY utils.sh $BOLB_SH_UTILS
+COPY utils.sh $BULB_SH_UTILS
 ENTRYPOINT ["build-sysroot"]
