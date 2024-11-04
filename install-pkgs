@@ -99,7 +99,9 @@ mv /var/lib/dpkg $dpkg_backup
 if [ -d "$root_dir/var/lib/dpkg" ]; then
 	cp -r "$root_dir/var/lib/dpkg" /var/lib/dpkg
 else
-	cp -r /var/lib/dpkg-empty /var/lib/dpkg
+	rm -rf /var/lib/dpkg
+	mkdir -p /var/lib/dpkg/info
+	touch /var/lib/dpkg/status
 fi
 
 echo $arch >>/var/lib/dpkg/arch
