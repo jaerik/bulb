@@ -1,6 +1,6 @@
 #!/bin/sh -eu
 
-. $BOLB_SH_UTILS
+. $BULB_SH_UTILS
 
 usage() {
 	echo "
