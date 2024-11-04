@@ -25,8 +25,8 @@ ignore_dependencies() {
 	for l_dep in $*; do
 		l_dep_version=$(apt-cache show $l_dep |sed -n 's/Version: \(.*\)/\1/p')
 		equivs-control $l_dep.control
-		sed -i -e "s/<package name; defaults to equivs-dummy>/$l_dep/g" \
-		       -e "s/# Version: <enter version here; defaults to 1.0>/Version: $l_dep_version/g" $l_dep.control
+		sed -i  -e "s/<package name; defaults to equivs-dummy>/$l_dep/g" \
+				-e "s/# Version: <enter version here; defaults to 1.0>/Version: $l_dep_version/g" $l_dep.control
 		equivs-build $l_dep.control >/dev/null 2>&1
 		dpkg -i ${l_dep}_${l_dep_version}_all.deb >/dev/null
 		rm $l_dep.control
@@ -37,20 +37,20 @@ root_dir=
 arch=
 while getopts 'a:r:h' opt; do
 	case $opt in
-		a)
-			arch=$OPTARG
-			;;
-		r)
-			root_dir=$OPTARG
-			;;
-		h)
-			usage
-			exit
-			;;
-		*)
-			usage
-			exit 1
-			;;
+	a)
+		arch=$OPTARG
+		;;
+	r)
+		root_dir=$OPTARG
+		;;
+	h)
+		usage
+		exit
+		;;
+	*)
+		usage
+		exit 1
+		;;
 	esac
 done
 
@@ -88,12 +88,12 @@ ignore=
 install=
 for deb in $*; do
 	case $deb in
-		*-)
-			ignore=${ignore:+$ignore }${deb%%-}
-			;;
-		*)
-			install=${install:+$install }$deb
-			;;
+	*-)
+		ignore=${ignore:+$ignore }${deb%%-}
+		;;
+	*)
+		install=${install:+$install }$deb
+		;;
 	esac
 done
 

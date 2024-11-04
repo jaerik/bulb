@@ -28,18 +28,18 @@ check_arch() {
 	l_file_arch=$(file -b "$l_bin_path" |sed 's/[^,]*, \([^,]*\).*/\1/')
 	l_arch=
 	case $l_file_arch in
-		ARM)
-			l_arch=armhf
-			;;
-		'ARM aarch64')
-			l_arch=arm64
-			;;
-		x86-64)
-			l_arch=amd64
-			;;
-		*)
-			croak $l_file_arch is not a supported architecture
-			;;
+	ARM)
+		l_arch=armhf
+		;;
+	'ARM aarch64')
+		l_arch=arm64
+		;;
+	x86-64)
+		l_arch=amd64
+		;;
+	*)
+		croak $l_file_arch is not a supported architecture
+		;;
 	esac
 	[ -z "$l_desired_arch" ] || [ "$l_arch" = "$l_desired_arch" ] || croak "The binary $l_bin_path is of architecture $l_arch which is not desired (desire=$l_desired_arch)"
 	echo $l_arch
@@ -92,11 +92,11 @@ get_lib_paths() {
 			[ "$lib_path" = 'not found' ] || [ "${lib_path%% \'*}" = 'removed' ] || [ "$lib_path" = "$lib" ] || {
 				lib_path=${lib_path% (*}
 				case $lib_path in
-					/*)
-						lib_path=".$lib_path"
-						;;
-					*)
-						;;
+				/*)
+					lib_path=".$lib_path"
+					;;
+				*)
+					;;
 				esac
 				printf '%s\n' "$lib_path"
 			}
@@ -135,23 +135,23 @@ out_sysroot=
 install_missing=
 while getopts 'i:o:mh' opt; do
 	case $opt in
-		i)
-			in_sysroot=$(get_absolut_path $OPTARG)
-			;;
-		o)
-			out_sysroot=$(get_absolut_path $OPTARG)
-			;;
-		m)
-			install_missing=y
-			;;
-		h)
-			usage
-			exit
-			;;
-		*)
-			usage
-			exit 1
-			;;
+	i)
+		in_sysroot=$(get_absolut_path $OPTARG)
+		;;
+	o)
+		out_sysroot=$(get_absolut_path $OPTARG)
+		;;
+	m)
+		install_missing=y
+		;;
+	h)
+		usage
+		exit
+		;;
+	*)
+		usage
+		exit 1
+		;;
 	esac
 done
 
