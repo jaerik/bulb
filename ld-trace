@@ -54,7 +54,7 @@ env_libs=$(ldd $env_bin |{
 		[ -z "$path" ] || echo $path || [ -f "$lib" ]
 		host_rtld=$lib
 	done
-    echo $host_rtld
+	echo $host_rtld
 })
 
 echo $env_libs
@@ -66,8 +66,17 @@ for source in $env_bin $env_libs $rtld "$bin_path"; do
 	}
 done
 
-cmd="LD_TRACE_LOADED_OBJECTS=1 $rtld $bin_path"
-[ $loadtime -eq 0 ] || cmd="LD_DEBUG=libs $bin_path"
-chroot "$tmp_root" $env_bin $cmd
+if [ $loadtime -eq 0 ]; then
+	cmd="LD_TRACE_LOADED_OBJECTS=1 $rtld $bin_path"
+	chroot "$tmp_root" $env_bin $cmd
+else
+	cmd="LD_DEBUG=libs $bin_path 2>&1"
+	chroot "$tmp_root" $env_bin $cmd |{
+		while read _ action cmd lib_path _ _ missing _; do
+			[ "$cmd" = 'init:' ] && printf '\t%s\n' "${lib_path##*/} ==> $lib_path"
+			[ "$action" = 'failed' ] && printf '\t%s\n' "${missing%%:} ==> not found"
+		done
+	}
+fi
 
 rm -rf $tmp_root
