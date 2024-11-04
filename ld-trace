@@ -6,7 +6,7 @@ usage() {
 	echo "
 Usage: ${0##*/} [options] file
 options:
-		-e loadtime
+        -e loadtime
         -r The root directory
         -h Print this help and exit
 "
@@ -16,20 +16,20 @@ root_dir=
 loadtime=0
 while getopts 'er:h' opt; do
 	case $opt in
-		e)
-			loadtime=1
-			;;
-		r)
-			root_dir=$OPTARG
-			;;
-		h)
-			usage
-			exit
-			;;
-		*)
-			usage
-			exit 1
-			;;
+	e)
+		loadtime=1
+		;;
+	r)
+		root_dir=$OPTARG
+		;;
+	h)
+		usage
+		exit
+		;;
+	*)
+		usage
+		exit 1
+		;;
 	esac
 done
 
@@ -49,7 +49,7 @@ tmp_root=$(mktemp -d)
 env_bin=/usr/bin/env
 
 env_libs=$(ldd $env_bin |{
-    host_rtld=
+	host_rtld=
 	while read lib n path n; do
 		[ -z "$path" ] || echo $path || [ -f "$lib" ]
 		host_rtld=$lib
